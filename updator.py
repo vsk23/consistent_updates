@@ -16,7 +16,7 @@ class Updator(EventMixin):
         print(str(core.components))
         Timer(15, self.update, recurring = False);
    
-    def update(self):
+    def one_touch_test(self):
         print("in update")
         
         match = of.ofp_match(in_port = 1)
