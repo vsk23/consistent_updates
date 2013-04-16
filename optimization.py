@@ -1,4 +1,6 @@
 import Queue
+from configuration import *  
+import updator as up
 from pox.core import core
 from pox.lib.revent import *
 import pox.openflow.libopenflow_01 as of
@@ -81,9 +83,6 @@ class Learning_switch(EventMixin):
 	print ("Switch is " + str(switch))
 	# Encountered packet from Switch: switch 
 #	self.porttable_for_switch[switch] = {}	
-        match1 = of.ofp_match(in_port = 1)
-	print match1
-	print match1.wildcards
 	packet = event.parsed
         thisport= event.port
         print("PacketIn: " + str(packet))
@@ -124,13 +123,16 @@ class Learning_switch(EventMixin):
 	    print("FLOW   " +str(flow))		
             if switch not in self.flow_table:
                 self.flow_table[switch]=[]
-                self.config[switch]=[]
             
             self.flow_table[switch].append(flow)
-            self.config[switch].append(flow)
             print self.flow_table
-	on_tc=op.check_one_touch(self.topo,config1,self.flow_table)	
-	print "can I one touch " + str(on_tc)
+	    match2 = of.ofp_match(in_port = 1)
+            flow2 = of.ofp_flow_mod(match = match2)
+            flow2.actions.append(of.ofp_action_output(port = 10))
+	    self.config[2]=[flow2]          
+            print self.config
+	on_tc=op.check_one_touch(self.topo,self.config,self.flow_table)	
+	print "can I one touch? " + str(on_tc)
 
 def launch():
     core.registerNew(Learning_switch)
@@ -163,4 +165,13 @@ def match_packet(config,switch,flowstate,neigh):
 
 
 
+def one_touch_test1():
+    print("in update")
+    match = of.ofp_match(in_port = 1)
+    flow = of.ofp_flow_mod(match = match)
+    flow.actions.append(of.ofp_action_output(port = 10))
+    config = Configuration()
+    config.add_flow_mod(flow,1)
+    config.add_flow_mod(flow,2)
+    return config 
 
