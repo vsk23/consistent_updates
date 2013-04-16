@@ -24,13 +24,16 @@ def check_one_touch(topo,config,flowstate):
 	# If any of the rules in the connected switches forward packets to the connected switch through the same port 
 	for connected_switch in neigh:
 	    print connected_switch
-            my_flows=flowstate[connected_switch]
-	    for flow in my_flows:
-		for key,value in topo[update_switch].iteritems():
-		    if int(value.split('_')[0])==connected_switch:
-		        my_action=flow.actions
-			if my_action[0].port==int(value.split('_')[1]):
-			    return 0 
+	    if connected_switch in flowstate:
+            	my_flows=flowstate[connected_switch]
+	    	for flow in my_flows:
+		   for key,value in topo[update_switch].iteritems():
+		       if int(value.split('_')[0])==connected_switch:
+		           my_action=flow.actions
+		            #If any of the actions are to forward the packet to update_switch no one touch  
+			    for acts in my_action:
+		                if my_action[acts].port==int(value.split('_')[1]):
+			            return 0 
 				
 	    q = Queue.Queue(0)
 	    check_if_loop=Check_loop(physical_topo,update_switch,update_switch,q)
