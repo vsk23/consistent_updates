@@ -1,0 +1,27 @@
+Testing :::: Based on mininet topologies 
+
+LINEAR TOPOLOGY 
+
+
+	 sudo mn --controller=remote --switch=user --topo=linear,5
+	 
+	 
+	 Test Case 1 : Have config updated in switch two. 
+				   Rules installed in 3 and 4 only. 
+				   Provided there is no loop between 3,4 - 2 then we perform a one touch. 
+				   
+				   Test passed. 
+				   
+	Next install a rule in 2 to forward packets to one. 
+	Now try and update switch 2. 
+	Test fails. 
+	
+	
+				   
+				   
+	 
+	 
+TREE TOPOLOGY 
+	  sudo mn --controller=remote --switch=user --topo=tree,5
+	  
+
