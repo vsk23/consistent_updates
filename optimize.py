@@ -8,7 +8,14 @@
 # The consistent updates component calls the check_one_touch() function which takes as input.
 # topo : Topology - how the switches are connected.
 # config : This update configuration - This is a map from switch to list of updates pertaing to the switch.
-# flowstate : state of flows for the switches in the network. 
+# flowstate : state of flows for the switches in the network.
+# Usage : 
+#    can_i_onetouch=check_one_touch(topo,config,flowstate) 
+#
+#
+#    Returns 0 if one touch not possible else returns 1.
+#  
+import Queue
 
 def check_one_touch(topo,config,flowstate):
 	one_switch=if_one_switch(config)
@@ -25,15 +32,15 @@ def check_one_touch(topo,config,flowstate):
 	for connected_switch in neigh:
 	    print connected_switch
 	    if connected_switch in flowstate:
-            	my_flows=flowstate[connected_switch]
-	    	for flow in my_flows:
-		   for key,value in topo[update_switch].iteritems():
-		       if int(value.split('_')[0])==connected_switch:
-		           my_action=flow.actions
+                my_flows=flowstate[connected_switch]
+	        for flow in my_flows:
+		    for key,value in topo[update_switch].iteritems():
+		        if int(value.split('_')[0])==connected_switch:
+		            my_action=flow.actions
 		            #If any of the actions are to forward the packet to update_switch no one touch  
 			    for acts in my_action:
-		                if my_action[acts].port==int(value.split('_')[1]):
-			            return 0 
+			        if acts.port==int(value.split('_')[1]):
+		                    return 0 
 				
 	    q = Queue.Queue(0)
 	    check_if_loop=Check_loop(physical_topo,update_switch,update_switch,q)
@@ -90,6 +97,8 @@ def reduce_to_topo(my_hash):
                 mytopo[key].append(conn)
     return mytopo
 
+
+#### Enhancement#### 
 def match_packet(config,switch,flowstate,neigh):
     packet_match_conf=[]
     packet_match_nwstate=[]
