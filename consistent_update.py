@@ -23,7 +23,7 @@ class ConsistentUpdate(EventMixin):
             self.listenTo(core.openflow_topology)
         else:
             self.listenTo(core)
-        self.vlan = 2;
+        self.vlan = 1;
         self.delete_interval = 5; #number of seconds to wait, need to NOT HARDCODE THIS
         return
    
@@ -33,7 +33,10 @@ class ConsistentUpdate(EventMixin):
             return 1 
         else:
             return 0
-    
+
+    # update_config
+    # main update function that should be called to update 
+    # network configuration    
     def update_config(self, config):
         #INSERT OPTIMIZATION CALL HERE 
         optimize = 2
@@ -44,21 +47,21 @@ class ConsistentUpdate(EventMixin):
             self.vlan = self.vlan%4093 + 1
         return
     
+    # delete_old_rules
+    # removes old (previous vlan) rules that are currently installed on
+    # both internal and external switches
+
     def delete_old_rules(self):
         print("deleting old rules with vlan : " + str(self.vlan - 1))
         flow = of.ofp_flow_mod(command = of.OFPFC_DELETE)
-        flow.match.dl_vlan = self.vlan - 1; 
+        flow.match.dl_vlan = self.vlan - 2; 
         for con in core.openflow._connections.values():
             con.send(flow); 
-        flow = of.ofp_flow_mod(command = of.OFPFC_DELETE)
-        flow.match.actions.append(of.ofp_action_vlan_vid(vlan_vid = self.vlan - 1)
-        # remove old external flows that stamp packets
  
     # one_touch_update
     # installs the given flow mods on the appropriate switched using a one
     # touch update 
     def one_touch_update(self, config):
-        print(str(config.flowmods));
         for dpid,flow_mod_list in config.flowmods.iteritems():
             for flow_mod in flow_mod_list:
                 flow_mod.match.dl_vlan = self.vlan;
@@ -66,24 +69,31 @@ class ConsistentUpdate(EventMixin):
         return
 
     # two_phase_update
-    #
-    #
+    # installs the given flow mods on the appropriate switches
+    # first, it installs rules with a new vlan id on the internal switches
+    # second, it installs vlan mod rules to external switches to modify
+    # appropriately
     def two_phase_update(self, config):
+
         #read all the flow mods
         for dpid,flow_mod_list in config.flowmods.iteritems():
             for flow_mod in flow_mod_list:
                 flow_mod.match.dl_vlan = self.vlan 
                 core.openflow.getConnection(dpid).send(flow_mod)
-        #for all external ports
+
+        #for all external ports, install vlan mod rules
         for id,sw in core.openflow_topology.topology._entities.iteritems():
             for portid in sw.ports.iterkeys():
                 if self.is_external(id,portid) == 1 and portid < 10:
                     match = of.ofp_match(in_port = portid)
                     flow = of.ofp_flow_mod(match = match)
+                    flow.command = of.OFPFC_MODIFY_STRICT
                     action = of.ofp_action_vlan_vid(vlan_vid = self.vlan)
                     flow.actions.append(action)
                     core.openflow.getConnection(id).send(flow)
-        Timer(self.delete_interval, self.delete_old_rules, recurring = False);
+
+        # Delete the old vlan rules after a certain interval
+        Timer(self.delete_interval, self.delete_old_rules, recurring = False)
         return 
 
 def launch():
