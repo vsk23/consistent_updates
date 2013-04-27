@@ -70,6 +70,9 @@ class Optimization(EventMixin):
 	    self.topo[link.dpid1][link.port1]=str(link.dpid2)+ "_" +str(link.port2)
 	return
 
+
+    def _handle_FlowMod(self,event):
+	print ("I Enter")
     def _handle_PacketIn(self, event):
         print("In PacketIn")
         switch = event.dpid
@@ -147,9 +150,16 @@ class Optimization(EventMixin):
 			    if acts.port==portid1:
 				loop_before=self.match_packet(self.flow_table,switch,my_match)
 				loop_after=self.match_packet(config,switch,my_match)
-				if(loop_before or loop_after)
-				return 0
+				if(loop_before or loop_after):
+				    return 0 
 	return 1
+
+
+
+
+
+
+
 
     def match_packet(self,config,switch,match1):
         print config
@@ -176,6 +186,28 @@ class Optimization(EventMixin):
         else:
             return one_touch_no_ok
 
-				
+    def Check_loop(graph,start,end,q):
+        temp_path = [start]
+        q.put(temp_path)
+        while q.qsize() != 0:
+                tmp_path = q.get()
+                last_node = tmp_path[len(tmp_path)-1]
+                print tmp_path
+                if last_node == end:
+                        print "VALID_PATH : ",tmp_path
+                for link_node in graph[last_node]:
+                        if link_node not in tmp_path:
+                                new_path = []
+                                new_path = tmp_path + [link_node]
+                                print "new path is "
+                                print new_path
+                                q.put(new_path)
+                        if link_node in tmp_path and link_node== end:
+                                print "loop to A"
+                                print tmp_path
+                                return 0
+        return 1				
+
+
 def launch():
     core.registerNew(Optimization)
