@@ -8,21 +8,21 @@ from pox.lib.recoco import Timer
 class ShortestPathApp(EventMixin):
 
     def __init__(self):
-        if core.hasCOmponent("openflow":
+        if core.hasComponent("openflow"):
             self.listenTo(core.openflow)
         else:
             self.listenTo(core)
         print "Launched Shortest Path\n"
+        print str(core.components)
         self.dest_id = 5
+        Timer(20, self.shortestpath_test, recurring = False)
 
     def shortestpath_test(self):
-        config = core.shortest_path.shortest_path_dest(self.dest_id);
-        core.consistent_update.update_config(config);
+        print "calling shortestpath"
+        config = core.ShortestPath.shortest_path_dest(self.dest_id);
+        print str(config.flowmods)
+        core.consistent_update(config);
 
-        #wait
-        #bring switch down
-        #should be called if not though:
-        config = core.shortest_path.shortest_path_dest(self.dest_id)
-        core.consistent_update.update_config(config);
-        
-        
+
+def launch():
+    core.registerNew(ShortestPathApp) 

@@ -1,29 +1,26 @@
 from pox.core                   import core
 from pox.lib.revent             import *
 from pox.lib.recoco             import Timer
+from configuration              import *
+from pox.openflow.discovery import *
 
 import pox.openflow.libopenflow_01 as of
 import sys
 import copy
 
 class ShortestPath(EventMixin):
-
+    _wantComponents = set(['openflow', 'openflow_topology', 'openflow_discovery'])
     def __init__(self):
-        _core_name = "shortest_path"
-
-        if core.hasComponent("openflow_topology"):
-            self.listenTo(core.openflow_topology)
-        if core.hasComponent("openflow"):
-            self.listenTo(core.openflow)
-        else:
+        super(EventMixin, self).__init__()
+        if not core.listenToDependencies(self, self._wantComponents):
             self.listenTo(core)
-        #Timer to call shortes_path
         self.dest_id = 5
-        Timer(20, self.shortest_path_dest, args=[self.dest_id], recurring = False)
         
-    def handle_SwitchConnectionDown(self, event):
-        #call shortest path again to recaculcate
-        self.shotest_path(self.dest_id)
+    def _handle_openflow_discovery_LinkEvent(self, event):
+        if event.removed:
+            config = self.shortest_path_dest(self.dest_id)
+            core.consistent_update.update_config(config)
+        return
 
     def get_min_entity_id(self, topology_ids, distances):
         min_id = 0;
@@ -48,38 +45,26 @@ class ShortestPath(EventMixin):
         distances[source_id-1] = 0;
        
         topology = core.openflow_topology.topology 
-       # print "Topology size " + str(len(topology_ids)) + "\n"
         while len(topology_ids) != 0:
             min_entity = topology.getEntityByID(self.get_min_entity_id(topology_ids,distances))
             if (distances[min_entity.id - 1]) == 1000000000:
                 break;
-            print str(topology_ids)
             topology_ids.remove(min_entity.id)
-        #    print "Current Min Entity: " + str(min_entity.id) + "\n"
-        #    print "New Topology size: " + str(len(topology_ids)) + "\n"
             #if we are at our target destination, break
             if min_entity.id == dest_id:
-         #       print "FINISHED: " + str(previous)
                 return previous 
-          #  print "Ports : " + str(min_entity.ports) 
             for port_id, port in min_entity.ports.items():
                 if port_id != 65534:
-                   # print str(port)
                     if len(port.entities) != 0:
                         for neighboring_switch in port.entities:
-                    #        print str(neighboring_switch.id)
                             alt_dist = 1 + distances[min_entity.id -1]
                             if alt_dist < distances[neighboring_switch.id - 1]:
                                     distances[neighboring_switch.id - 1] = alt_dist
                                     previous[neighboring_switch.id - 1] = min_entity.id
         
-           # print "finished \n"
-        #print previous
         return previous
         
             
-        #install mods to forward using the shortest path
-        #call consistent_update to update everything appropriately
     def shortest_path_dest(self, dest_id):
         shortest_paths={}
         for eid, entity in core.openflow_topology.topology._entities.items():
@@ -87,29 +72,29 @@ class ShortestPath(EventMixin):
             target = dest_id
             previous = self.shortest_path(eid, target)
             while not (previous[target - 1] == -1):
-               # print "TARGET : " + str(target)
                 path.append(target)
                 target = previous[target - 1]
             shortest_paths[entity.id] = path;
-        for sid, path in shortest_paths.items():
-           print " Path for " + str(sid) + ": " + str(path)
         return self.create_config(shortest_paths)
     
     def create_config(self, shortest_paths):
-        Configuration config = Configuration();
+        config = Configuration();
         #create a flow mod with output port to switch in short paths list
-        for switch_id, path in shortest_path.items():
+        for switch_id, path in shortest_paths.items():
             node_id = switch_id
-            for node in path.items():
+            for node in path:
                 switch = core.openflow_topology.topology.getEntityByID(node_id)
                 for port_id, port in switch.ports.items():
                     for neighboring_switch in port.entities:
                         if neighboring_switch.id == node:
-                            flow = of.ofp_flow_mod(dst="00:00:00:00:00:0"+str(self.dest_id))
-                            flow.actions.append(of.ofp_action_output(port = pord_id));
+                            match = of.ofp_match(dl_type=0X800,
+                                                 nw_dst="10.0.0.05")
+                            flow = of.ofp_flow_mod( match = match)
+                            flow.actions.append(of.ofp_action_output(port = port_id));
                             config.add_flow_mod(flow, node_id)
                 node_id = node
-                
         return config
+
 def launch():
-    core.registerNew(ShortestPath)
+    if not core.hasComponent("ShortestPath"):
+        core.register("ShortestPath", ShortestPath())
