@@ -27,12 +27,12 @@ class Optimization(EventMixin):
         self.switches=[]
         self.flow_table={}
         self.config={}
-    def _handle_ComponentRegistered(self, event):
-        self.addListener(GoingDownEvent, _handle_GoingDownEvent)
-        if event.name == "openflow":
-            self.listenTo(core.openflow)
-        else:
-            pass
+    #def _handle_ComponentRegistered(self, event):
+    #    self.addListener(GoingDownEvent, _handle_GoingDownEvent)
+    #    if event.name == "openflow":
+    #        self.listenTo(core.openflow)
+     #   else:
+     #       pass
     
     # You should modify the handlers below.
     def _handle_ConnectionUp(self, event):
@@ -81,7 +81,7 @@ class Optimization(EventMixin):
 #	self.porttable_for_switch[switch] = {}	
 	packet = event.parsed
         thisport= event.port
-        print("PacketIn: " + str(packet))
+        #print("PacketIn: " + str(packet))
         src = packet.src
 	dst = packet.dst
 	# Create a hash of the source and the assosiated port 
@@ -123,10 +123,16 @@ class Optimization(EventMixin):
 
 
     def check_if_one_touch(self,config1):
+	print "in check if"
 	config=config1.flowmods
         one_switch = len(config)
+    #YOUR CODE HERE RETURNS NONE BUT THEN LATER THERE's
+    # A RETURN 0 or 1. So therefore, it'll be messires to
+    # hanve to handle this case. 
+    #You should return 0 or 1 like you did below instead
 	if one_switch is not 1:
-	    return
+		print "in here"
+		return
 	for key,value in config.iteritems(): 
 	    switch=key
 	sw1 = core.openflow_topology.topology.getEntityByID(switch)

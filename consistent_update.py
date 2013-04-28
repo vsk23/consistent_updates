@@ -21,6 +21,8 @@ class ConsistentUpdate(EventMixin):
             self.listenTo(core.openflow)
         if core.hasComponent("openflow_topology"):
             self.listenTo(core.openflow_topology)
+        if core.hasComponent("optimization"):
+            self.listenTo(core.optimization)
         else:
             self.listenTo(core)
         self.vlan = 1;
@@ -39,11 +41,12 @@ class ConsistentUpdate(EventMixin):
     # network configuration    
     def update_config(self, config):
         #INSERT OPTIMIZATION CALL HERE 
-        optimize = 2
-        if optimize == 1:
-            self.one_touch_update(config);
-        if optimize == 2:
-            self.two_phase_update(config);
+        print core.optimization.check_if_one_touch(config) 
+ 
+        if core.optimization.check_if_one_touch(config):
+            self.one_touch_update(config)
+        else:
+            self.two_phase_update(config)
             self.vlan = self.vlan%4093 + 1
         return
     
