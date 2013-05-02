@@ -13,15 +13,19 @@ class ShortestPathApp(EventMixin):
         else:
             self.listenTo(core)
         print "Launched Shortest Path\n"
-        print str(core.components)
-        self.dest_id = 5
+        self.dest_ids = [5,4,3,2,1]
         Timer(20, self.shortestpath_test, recurring = False)
 
     def shortestpath_test(self):
-        print "calling shortestpath"
-        config = core.ShortestPath.shortest_path_dest(self.dest_id);
-        print str(config.flowmods)
-        core.consistent_update(config);
+        configs = [] 
+        for dest_id in self.dest_ids:
+            configs.append(core.ShortestPath.shortest_path_dest(dest_id))
+        configs[0].add_config(configs[1])
+        configs[0].add_config(configs[2])
+        configs[0].add_config(configs[3])
+        configs[0].add_config(configs[4])
+
+        core.consistent_update.update_config(configs[0]);
 
 
 def launch():

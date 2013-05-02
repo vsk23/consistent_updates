@@ -11,3 +11,8 @@ class Configuration:
         else:
             self.flowmods[dpid] = [mod]
         return
+
+    def add_config(self, config):
+        for dpid,mod in config.flowmods.iteritems():
+            for fmod in mod:
+                self.add_flow_mod(fmod,dpid)
