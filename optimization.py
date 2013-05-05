@@ -11,6 +11,7 @@ from match_path import *
 
 
 class Optimization(EventMixin):
+    _core_name = "optimization"
 
     def __init__(self):
         if core.hasComponent("openflow"):
@@ -33,12 +34,12 @@ class Optimization(EventMixin):
         Timer(40, self.send_flows, recurring = False);
 #        Timer(, self.check_if_one_touch(self.configure,self.flow_table), recurring = False);
         
-    def _handle_ComponentRegistered(self, event):
-        self.addListener(GoingDownEvent, _handle_GoingDownEvent)
-        if event.name == "openflow":
-            self.listenTo(core.openflow)
-        else:
-            pass
+    #def _handle_ComponentRegistered(self, event):
+    #    self.addListener(GoingDownEvent, _handle_GoingDownEvent)
+    #    if event.name == "openflow":
+    #        self.listenTo(core.openflow)
+    #    else:
+    #        pass
     
     # You should modify the handlers below.
     def _handle_ConnectionUp(self, event):
@@ -72,7 +73,8 @@ class Optimization(EventMixin):
  	# Keep track of network state and send 
 	# set of flow mods to 
     def check_if_one_touch(self,config1):
-	check_if_one_touch_flow(config1,self.flow_table)
+	if_otc=self.check_if_one_touch_flow(config1,self.flow_table)
+	return if_otc
 
     def check_if_one_touch_flow(self,config1,flowtable):
         self.flow_table=flowtable	
@@ -287,7 +289,7 @@ class Optimization(EventMixin):
 	flow13 = of.ofp_flow_mod(match=match13)
 	flow15 = of.ofp_flow_mod(match=match15)
 	flow14 = of.ofp_flow_mod(match=match14)
-	flow9 = of.ofp_flow_mod(match=match9)
+	#flow9 = of.ofp_flow_mod(match=match9)
 	flow3.actions.append(action3)
 	flow4.actions.append(action4)
         self.flow_table[1]=[]
