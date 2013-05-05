@@ -1,219 +1,323 @@
 import Queue
-from configuration import *  
-import updator as up
 from pox.core import core
 from pox.lib.revent import *
+from pox.lib.recoco import *
 import pox.openflow.libopenflow_01 as of
-from pox.lib.recoco import Timer
+
+import pox.openflow.discovery
+from configuration import *
+from match_path import *
+  # Add all links and switches
+
 
 class Optimization(EventMixin):
-    _core_name = "optimization"
+
     def __init__(self):
         if core.hasComponent("openflow"):
-            print("has openflow component")
             self.listenTo(core.openflow)
         if core.hasComponent("openflow_discovery"):
-            print("has openflow_discovery component") 
+            print("openflow_discovery")
             self.listenTo(core.openflow_discovery)
         if core.hasComponent("openflow_topology"):
-            print("has openflow_topology component") 
+            print("openflow_discovery")
             self.listenTo(core.openflow_topology)
         else:
             self.listenTo(core)
-        self.N = 2
-	self.porttable_for_switch = {}  # Array of hash tables per switch. 
-	self.flow_table = {}
-        self.topo={}
-        self.switches=[]
-        self.flow_table={}
-        self.config={}
-    #def _handle_ComponentRegistered(self, event):
-    #    self.addListener(GoingDownEvent, _handle_GoingDownEvent)
-    #    if event.name == "openflow":
-    #        self.listenTo(core.openflow)
-     #   else:
-     #       pass
+        match = of.ofp_match(in_port = 1)
+        flow = of.ofp_flow_mod(match = match)
+        flow.actions.append(of.ofp_action_output(port = 10))
+        self.configure=Configuration()
+        self.configure.add_flow_mod(flow,1)
+	self.flow_table={}
+	
+        Timer(40, self.send_flows, recurring = False);
+#        Timer(, self.check_if_one_touch(self.configure,self.flow_table), recurring = False);
+        
+    def _handle_ComponentRegistered(self, event):
+        self.addListener(GoingDownEvent, _handle_GoingDownEvent)
+        if event.name == "openflow":
+            self.listenTo(core.openflow)
+        else:
+            pass
     
     # You should modify the handlers below.
     def _handle_ConnectionUp(self, event):
-	switch=event.connection.dpid
-        self.switches.append(switch)
- 	pass
+        pass
 
     def _handle_ConnectionDown(self, event):
         pass
 
     def _handle_FlowRemoved(self, event):
-        switch=event.connection.dpid
-	flow_removed = event.ofp
-        for entry in self.flow_table[switch]:
-            if(flow_removed.match == entry.match and flow_removed.priority == entry.priority):
-                self.flow_table[switch].remove(entry)
         pass
 
     def _handle_PortStatus(self,event):
         pass
 
-    def _handle_StatsReply(self,event):
+    def _handle_FlowStatsReceived(self,event):
         pass
-    
+
+    def _handle_PacketIn(self, event):
+    	pass
     def _handle_LinkEvent(self, event):
         link = event.link
         switch_one = link.dpid1
-        port_one = link.port1 
+        port_one = link.port1
         switch_two = link.dpid2
         port_two = link.dpid2
-	if not self.topo.has_key(link.dpid1):
-	    self.topo[link.dpid1]={}
-	    self.topo[link.dpid1][link.port1]=str(link.dpid2)+ "_" +str(link.port2)
-	else:
-	    self.topo[link.dpid1][link.port1]=str(link.dpid2)+ "_" +str(link.port2)
-	return
+
+        print("there was a link event between " +  str(event.link.dpid1) + "," + str(port_one) + " and " + str(event.link.dpid1) + "," + str(port_two))
+   	pass
 
 
-    def _handle_FlowMod(self,event):
-	print ("I Enter")
-    def _handle_PacketIn(self, event):
-        print("In PacketIn")
-        switch = event.dpid
-	print ("Switch is " + str(switch))
-	# Encountered packet from Switch: switch 
-#	self.porttable_for_switch[switch] = {}	
-	packet = event.parsed
-        thisport= event.port
-        #print("PacketIn: " + str(packet))
-        src = packet.src
-	dst = packet.dst
-	# Create a hash of the source and the assosiated port 
-	#Dummy flwo populated
- 	if switch not in self.porttable_for_switch:
-	    self.porttable_for_switch[switch] = {}
-	if src not in self.porttable_for_switch[switch]:
-	    print ("Registering for Switch " +str(switch)+"MAC address" + str(src) + "at Port" + str(thisport))
-	    self.porttable_for_switch[switch][src]=thisport
-	if dst not in self.porttable_for_switch[switch]:
-	    my_action = of.ofp_action_output(port=of.OFPP_FLOOD)
-            my_in_port = event.port
-            packetout = of.ofp_packet_out(in_port=my_in_port)  
-            if event.ofp.buffer_id != -1: 
-                packetout.buffer_id = event.ofp.buffer_id            
-            packetout.actions.append(my_action)
-	    event.connection.send(packetout)
-	else:
-         # modify the flow table on the switch i
-	    action = of.ofp_action_output(port=self.porttable_for_switch[switch][dst])
-	    match = of.ofp_match.from_packet(packet)
-            print ("FROM PACKET" + str(match))
-	    match.in_port = event.port
-            flow = of.ofp_flow_mod(match=match)
-	    flow.command = of.OFPFC_ADD
-            flow.idle_timeout = of.OFP_FLOW_PERMANENT
-            flow.hard_timeout = of.OFP_FLOW_PERMANENT
-            flow.priority = 65535
-            flow.actions.append(action)
-            if event.ofp.buffer_id != -1: 
-                flow.buffer_id = event.ofp.buffer_id            
-            event.connection.send(flow)
-	    print("FLOW MATCH  " +str(flow.match))		
-	    print("FLOW   " +str(flow))		
-            if switch not in self.flow_table:
-                self.flow_table[switch]=[]
-            self.flow_table[switch].append(flow)
-            print self.flow_table
-
-
+ 	# Keep track of network state and send 
+	# set of flow mods to 
     def check_if_one_touch(self,config1):
-	print "in check if"
+	check_if_one_touch_flow(config1,self.flow_table)
+
+    def check_if_one_touch_flow(self,config1,flowtable):
+        self.flow_table=flowtable	
 	config=config1.flowmods
-        one_switch = len(config)
-    #YOUR CODE HERE RETURNS NONE BUT THEN LATER THERE's
-    # A RETURN 0 or 1. So therefore, it'll be messires to
-    # hanve to handle this case. 
-    #You should return 0 or 1 like you did below instead
+        #print config
+	one_switch = len(config)
 	if one_switch is not 1:
-		print "in here"
-		return
+	    return 0
 	for key,value in config.iteritems(): 
-	    switch=key
-	sw1 = core.openflow_topology.topology.getEntityByID(switch)
-        print sw1,sw1.ports
-        print sw1.flow_table
-	for portid1,portvalue in sw1.ports.iteritems():
-	    print  portid1,portvalue
-	    for neigh in portvalue.entities:	    
-	        print str(portid1) + " is connected to "
- 	        print neigh
-		for id,sw in core.openflow_topology.topology._entities.iteritems():
-                    if sw == neigh:
-                        neigh=id    
-	        if neigh in self.flow_table:
-                    my_flows=self.flow_table[neigh]
-	            for flow in my_flows:
-		        my_action=flow.actions
-		        my_match=flow.match
-			for acts in my_action:
-			    print acts,my_match,flow
-			    if acts.port==portid1:
-				loop_before=self.match_packet(self.flow_table,switch,my_match)
-				loop_after=self.match_packet(config,switch,my_match)
-				if(loop_before or loop_after):
-				    return 0 
+    	    switch=key
+        # Create the graph based on current network topology . 
+	self.graph=self.create_graph()
+	#print " After "
+	# 1 ---> 3 ---> 6 ---> 9 -----> 1 
+	#  
+        # Check for reachability back to switch where the update is done 
+	#  By detecting Topological loops. 
+	my_pass=self.Check_loop(self.graph,switch,switch,self.flow_table) 
+	return my_pass
+
+
+	# Make a graph of the physical Topo of the network
+    def create_graph(self):
+        self.mytopo={}
+        for id,sw in core.openflow_topology.topology._entities.iteritems():
+            for portid,portconn in sw.ports.iteritems():
+                for neigh in portconn.entities:
+                    for id1,sw1 in core.openflow_topology.topology._entities.iteritems():
+                        if sw1 == neigh:
+                            neigh=id1
+                    if not self.mytopo.has_key(id):
+                        self.mytopo[id]=[neigh]
+                    else:
+                        self.mytopo[id].append(neigh)
+        return self.mytopo
+
+	# Return OR of the network packet fields. 
+    def match_intersect(self,mine, others):
+        if mine == None:
+            return others
+        elif others == None:
+            return mine
+        elif mine == others:
+            return mine
+        else:
+            return False
+
+# This function constructs a new match object based on the fields of two match objects
+# if either of two fields are None the non-None field is used as the field match
+# If equal either of the field is returned. 
+# Else False
+# The resultant match is sent back. 
+# If wither of the fields conflict.  
+# Need to check if discard in_port 
+    def construct_match(self,match1,match2):
+        match = of.ofp_match()
+        match.in_port=self.match_intersect(match1.in_port, match2.in_port)
+        if(match.in_port==False):
+            return False 
+        match.dl_vlan=self.match_intersect(match1.dl_vlan, match2.dl_vlan)
+        if(match.dl_vlan==False):
+            return False 
+        match.dl_src=self.match_intersect(match1.dl_src, match2.dl_src)
+        if(match.dl_src==False):
+            return False 
+        match.dl_dst=self.match_intersect(match1.dl_dst, match2.dl_dst)
+        if(match.dl_dst==False):
+            return False 
+        match.dl_type=self.match_intersect(match1.dl_type, match2.dl_type)
+        if(match.dl_type==False):
+            return False 
+        match.nw_proto=self.match_intersect(match1.nw_proto, match2.nw_proto)
+        if(match.nw_proto==False):
+            return False 
+        match.tp_src=self.match_intersect(match1.tp_src, match2.tp_src)
+        if(match.tp_src==False):
+            return False 
+        match.tp_dst=self.match_intersect(match1.tp_dst, match2.tp_dst)
+        if(match.tp_dst==False):
+            return False 
+        match.dl_vlan_pcp=self.match_intersect(match1.dl_vlan_pcp, match2.dl_vlan_pcp)
+        if(match.dl_vlan_pcp==False):
+            return False 
+        match.nw_tos=self.match_intersect(match1.nw_tos, match2.nw_tos)
+        if(match.nw_tos==False):
+            return False
+        match.nw_src=self.match_intersect(match1.nw_src, match2.nw_src)
+        if(match.nw_src==False):
+            return False 
+        match.nw_dst=self.match_intersect(match1.nw_dst, match2.nw_dst)
+        if(match.nw_dst==False):
+            return False 
+#            other_nw_dst = other.get_nw_dst()
+#        if self_nw_dst[1] > other_nw_dst[1] or not IPAddr(other_nw_dst[0]).inNetwork((self_nw_dst[0], 32-self_nw_dst[1])): return False
+ 
+        return match
+        
+    def Check_loop(self,graph,start,end,flow_state):
+        q = Queue(0);
+        temp_path = [start]
+        match=of.ofp_match()
+        flag=1
+        current_match_path=match_path(match,temp_path)
+        q.put(current_match_path)
+        while q.qsize() != 0:
+            tmp_path = q.get()
+            lastmatch=tmp_path.lastswitchmatch
+            lastpath=tmp_path.path
+            last_node = lastpath[len(lastpath)-1]
+            if last_node is end and flag == 1:
+                flag=0
+            elif last_node is end and flag != 1:
+                return 1 
+            for link_node in graph[last_node]:
+                if link_node not in lastpath:
+                    new_path = []
+                    new_path = lastpath + [link_node]
+		    if link_node in self.flow_table:	
+                       for flow in self.flow_table[link_node]:
+                    	    match=flow.match
+                    	    cons_match=self.construct_match(lastmatch,match)
+                    	    if(cons_match!=False):
+                                new_matchpath=match_path(cons_match,new_path)
+			        q.put(new_matchpath)
+		else:
+		     return 0
 	return 1
 
 
-
-
-
-
-
-
-    def match_packet(self,config,switch,match1):
-        print config
-        packet_match_conf=[]
-        for flowmod in config[switch]:
-            packet_match_conf.append(flowmod.match)
-        ob1=match1
-        print "packet_match_conf"
-        print packet_match_conf
-        for ob in packet_match_conf:
-            ob1.in_port=0
-	    ob.in_port=0
-            return1=ob.matches_with_wildcards(ob1)
-	    if return1 is True:
-		return True
-	return False
-
-    def if_one_switch(config):
-        one_switch = len(config)
-        one_touch_ok=1
-        one_touch_no_ok=0
-        if one_switch is one_touch_ok:
-            return one_touch_ok
-        else:
-            return one_touch_no_ok
-
-    def Check_loop(graph,start,end,q):
-        temp_path = [start]
-        q.put(temp_path)
-        while q.qsize() != 0:
-                tmp_path = q.get()
-                last_node = tmp_path[len(tmp_path)-1]
-                print tmp_path
-                if last_node == end:
-                        print "VALID_PATH : ",tmp_path
-                for link_node in graph[last_node]:
-                        if link_node not in tmp_path:
-                                new_path = []
-                                new_path = tmp_path + [link_node]
-                                print "new path is "
-                                print new_path
-                                q.put(new_path)
-                        if link_node in tmp_path and link_node== end:
-                                print "loop to A"
-                                print tmp_path
-                                return 0
-        return 1				
-
-
+    def send_flows(self):
+	match = of.ofp_match(nw_tos=1,in_port=3)
+	match2 = of.ofp_match(dl_type=0x800)
+	match3 = of.ofp_match(nw_src='10.0.0.1')
+	match6 = of.ofp_match(nw_src='10.0.0.1')
+	match9 = of.ofp_match(nw_dst='10.0.0.3',in_port=3)
+	match2 = of.ofp_match(in_port=3)
+	match2 = of.ofp_match(in_port=3)
+	for key,con in core.openflow._connections.iteritems():
+            print key,con		
+	action = of.ofp_action_output(port=2)
+  	match.dl_type=0x800
+	flow = of.ofp_flow_mod(match=match)
+	flow.actions.append(action)
+	action = of.ofp_action_output(port=2)
+  	match.dl_type=0x800
+	flow = of.ofp_flow_mod(match=match)
+	flow.actions.append(action)
+	action2 = of.ofp_action_output(port=2)
+	action3 = of.ofp_action_output(port=2)
+	action4 = of.ofp_action_output()
+	match3 = of.ofp_match()
+	match3.nw_src='10.0.0.1'
+  	match3.dl_type=0x800
+	match3.nw_dst='10.0.0.2'
+	match3.in_port=3
+	match4 = of.ofp_match()
+	match4.nw_src='10.0.0.1'
+	match4.nw_dst='10.0.0.2'
+  	match4.dl_type=0x806
+	match4.in_port=3
+	match5 = of.ofp_match()
+	match5.nw_src='10.0.0.2'
+	match5.nw_dst='10.0.0.8'
+  	match5.dl_type=0x812
+	match5.in_port=3
+	match6 = of.ofp_match()
+	match6.nw_src='10.0.0.1'
+	match6.nw_dst='10.0.0.2'
+	match6.in_port=5
+	match7 = of.ofp_match()
+	match7.nw_src='10.0.0.1'
+	match7.nw_dst='10.0.0.2'
+	match8 = of.ofp_match()
+	match8.nw_src='10.0.0.4'
+	match8.nw_dst='10.0.0.6'
+	match19 = of.ofp_match()
+	match19.nw_src='10.0.0.12'
+	match19.nw_dst='10.0.0.23'
+	match12 = of.ofp_match()
+	match12.nw_src='10.0.0.14'
+	match12.nw_dst='10.0.0.25'
+	match13 = of.ofp_match()
+	match13.nw_src='10.0.0.16'
+	match13.nw_dst='10.0.0.27'
+	match14 = of.ofp_match()
+	match14.nw_src='10.0.0.18'
+	match14.nw_dst='10.0.0.29'
+	match15 = of.ofp_match()
+	match15.nw_src='10.0.0.21'
+	match15.nw_dst='10.0.0.22'
+	match16 = of.ofp_match()
+	match16.nw_src='10.0.0.31'
+	match16.nw_dst='10.0.0.32'
+	match18 = of.ofp_match()
+	match18.nw_src='10.0.0.41'
+	match18.nw_dst='10.0.0.42'
+	match9 = of.ofp_match()
+	match9.nw_src='10.0.0.1'
+	match9.nw_dst='10.0.0.2'
+	action2 = of.ofp_action_output(port=2)
+	
+	flow2 = of.ofp_flow_mod(match=match2)
+	flow2.actions.append(action4)
+	flow3 = of.ofp_flow_mod(match=match3)
+	flow4 = of.ofp_flow_mod(match=match4)
+	flow5 = of.ofp_flow_mod(match=match5)
+	flow7 = of.ofp_flow_mod(match=match7)
+	flow6 = of.ofp_flow_mod(match=match6)
+	flow8 = of.ofp_flow_mod(match=match8)
+	flow16 = of.ofp_flow_mod(match=match16)
+	flow18 = of.ofp_flow_mod(match=match18)
+	flow13 = of.ofp_flow_mod(match=match13)
+	flow15 = of.ofp_flow_mod(match=match15)
+	flow14 = of.ofp_flow_mod(match=match14)
+	flow9 = of.ofp_flow_mod(match=match9)
+	flow3.actions.append(action3)
+	flow4.actions.append(action4)
+        self.flow_table[1]=[]
+        self.flow_table[2]=[]
+        self.flow_table[3]=[]
+        self.flow_table[4]=[]
+        self.flow_table[5]=[]
+        self.flow_table[6]=[]
+        self.flow_table[7]=[]
+        self.flow_table[8]=[]
+        self.flow_table[9]=[]
+        self.flow_table[2].append(flow2)
+        self.flow_table[4].append(flow2)
+        self.flow_table[3].append(flow3)
+        self.flow_table[6].append(flow6)
+        self.flow_table[6].append(flow7)
+        self.flow_table[3].append(flow5)
+        self.flow_table[4].append(flow4)
+        self.flow_table[5].append(flow5)
+        self.flow_table[9].append(flow8)
+        self.flow_table[9].append(flow18)
+        self.flow_table[9].append(flow13)
+        self.flow_table[9].append(flow16)
+        self.flow_table[9].append(flow14)
+        self.flow_table[9].append(flow15)
+        #self.flow_table[9].append(flow9)
+	#chk=self.check_if_one_touch(self.configure,self.flow_table) 
+	#if chk == 1:
+	#    print " reaches back"
+	#else:
+	#    print " No loop" 
 def launch():
     core.registerNew(Optimization)
