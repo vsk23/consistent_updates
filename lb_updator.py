@@ -21,7 +21,7 @@ class Updator(EventMixin):
         self.configure=Configuration()
         self.configure.add_flow_mod(flow,1)
         self.flow_table={}
-        Timer(60, self.one_touch_test, recurring = False);
+        #Timer(60, self.one_touch_test, recurring = False);
   	 
     def one_touch_test(self):
         print("in update")
