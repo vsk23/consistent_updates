@@ -1,48 +1,47 @@
 import Queue
 from pox.core import core
 from pox.lib.revent import *
+from pox.lib.recoco import *
 import pox.openflow.libopenflow_01 as of
-from pox.lib.recoco import Timer
+import updator as up
+import pox.openflow.discovery
+from configuration import *
+from match_path import *
+  # Add all links and switches
 
 
-
-config = { "1":["flow1","flow3","flow2","flow5"],
-                "2":["FLOWE"]}
-
-
-class Learning_switch(EventMixin):
+class Optimization(EventMixin):
+    _core_name = "optimization"
 
     def __init__(self):
         if core.hasComponent("openflow"):
-            print("has openflow component")
             self.listenTo(core.openflow)
         if core.hasComponent("openflow_discovery"):
-            print("has openflow_discovery component")
+            print("openflow_discovery")
             self.listenTo(core.openflow_discovery)
         if core.hasComponent("openflow_topology"):
-            print("has openflow_topology component")
+            print("openflow_discovery")
             self.listenTo(core.openflow_topology)
         else:
             self.listenTo(core)
-        #store|| Key = ether.switch Value = output port
-        self.host_port_map={}
-        self.physical_topo={}
-        self.switches=[]
-    def _handle_ComponentRegistered(self, event):
-        self.addListener(GoingDownEvent, _handle_GoingDownEvent)
-        if event.name == "openflow":
-            self.listenTo(core.openflow)
-        else:
-            pass
-
+        match = of.ofp_match(in_port = 1)
+        flow = of.ofp_flow_mod(match = match)
+        flow.actions.append(of.ofp_action_output(port = 10))
+        self.configure=Configuration()
+        self.configure.add_flow_mod(flow,1)
+	self.flow_table={}
+        Timer(140, self.send_flows, recurring = False);
+        #Timer(30, self.check_if_one_touch(), recurring = False);
+        
+    #def _handle_ComponentRegistered(self, event):
+    #    self.addListener(GoingDownEvent, _handle_GoingDownEvent)
+    #    if event.name == "openflow":
+    #        self.listenTo(core.openflow)
+    #    else:
+    #        pass
+    
     # You should modify the handlers below.
     def _handle_ConnectionUp(self, event):
-        print("has _handle_ConnectionUp")
-        switch=event.connection.dpid
-        self.switches.append(switch)
-        print self.switches
-         self.switches.append(switch)
-        print self.switches
         pass
 
     def _handle_ConnectionDown(self, event):
@@ -54,72 +53,154 @@ class Learning_switch(EventMixin):
     def _handle_PortStatus(self,event):
         pass
 
-    def _handle_StatsReply(self,event):
+    def _handle_FlowStatsReceived(self,event):
         pass
 
+    def _handle_PacketIn(self, event):
+    	pass
     def _handle_LinkEvent(self, event):
         link = event.link
         switch_one = link.dpid1
         port_one = link.port1
         switch_two = link.dpid2
         port_two = link.dpid2
-        self.physical_topo[link.dpid1]=[]
-        self.physical_topo[link.dpid1].append(link.dpid2)
-        for key, value in self.physical_topo.iteritems() :
-                print key, value
-        self.hash_list=list(self.physical_topo)
-        return
+        print("there was a link event between " +  str(event.link.dpid1) + "," + str(port_one) + " and " + str(event.link.dpid1) + "," + str(port_two))
+   	pass
+ 	# Keep track of network state and send 
+	# set of flow mods to 
+    def check_if_one_touch(self,config1):
+	config=config1.flowmods
+        #print config
+	one_switch = len(config)
+	if one_switch is not 1:
+	    return 0
+	for key,value in config.iteritems(): 
+    	    switch=key
+        # Create the graph based on current network topology . 
+	self.graph=self.create_graph()
+        if len(self.graph) ==0:
+	    return 1
+	print ("self.graph" + str(self.graph ))
+	#print " After "
+	# 1 ---> 3 ---> 6 ---> 9 -----> 1 
+	#  
+        # Check for reachability back to switch where the update is done 
+	#  By detecting Topological loops. 
+	my_pass=self.Check_loop(self.graph,switch,switch,self.flow_table) 
+	return my_pass
 
-    def _handle_PacketIn(self, event):
-        print("In PacketIn")
-        self.one_switch=if_one_switch(config)
-        if self.one_switch == 1:
-            self.q = Queue.Queue(0)
-            self.check_if_loop=Check_loop(self.physical_topo,1,1,self.q)
-            if self.check_if_loop==0:
-                print "Can't be one touch"
-            else:
-                print "Can be one touch"
+
+	# Make a graph of the physical Topo of the network
+    def create_graph(self):
+        self.mytopo={}
+        for id,sw in core.openflow_topology.topology._entities.iteritems():
+            for portid,portconn in sw.ports.iteritems():
+                for neigh in portconn.entities:
+                    for id1,sw1 in core.openflow_topology.topology._entities.iteritems():
+                        if sw1 == neigh:
+                            neigh=id1
+                    if not self.mytopo.has_key(id):
+                        self.mytopo[id]=[neigh]
+                    else:
+                        self.mytopo[id].append(neigh)
+        return self.mytopo
+
+	# Return OR of the network packet fields. 
+    def match_intersect(self,mine, others):
+        if mine == None:
+            return others
+        elif others == None:
+            return mine
+        elif mine == others:
+            return mine
         else:
-            print "Can't be one touch"
-        return
-    def _handle_SwitchJoin(self,event):
-         return
+            return False
 
-def launch():
-    core.registerNew(Learning_switch)
-
-def if_one_switch(config):
-   one_switch = len(config)
-   one_touch_ok=1
-   one_touch_no_ok=0
-   if one_switch is one_touch_ok:
-      return one_touch_ok
-   else:
-      return one_touch_no_ok
-
-
-def Check_loop(graph,start,end,q):
-
+# This function constructs a new match object based on the fields of two match objects
+# if either of two fields are None the non-None field is used as the field match
+# If equal either of the field is returned. 
+# Else False
+# The resultant match is sent back. 
+# If wither of the fields conflict.  
+# Need to check if discard in_port 
+    def construct_match(self,match1,match2):
+        match = of.ofp_match()
+        match.in_port=self.match_intersect(match1.in_port, match2.in_port)
+        if(match.in_port==False):
+            return False 
+        match.dl_vlan=self.match_intersect(match1.dl_vlan, match2.dl_vlan)
+        if(match.dl_vlan==False):
+            return False 
+        match.dl_src=self.match_intersect(match1.dl_src, match2.dl_src)
+        if(match.dl_src==False):
+            return False 
+        match.dl_dst=self.match_intersect(match1.dl_dst, match2.dl_dst)
+        if(match.dl_dst==False):
+            return False 
+        match.dl_type=self.match_intersect(match1.dl_type, match2.dl_type)
+        if(match.dl_type==False):
+            return False 
+        match.nw_proto=self.match_intersect(match1.nw_proto, match2.nw_proto)
+        if(match.nw_proto==False):
+            return False 
+        match.tp_src=self.match_intersect(match1.tp_src, match2.tp_src)
+        if(match.tp_src==False):
+            return False 
+        match.tp_dst=self.match_intersect(match1.tp_dst, match2.tp_dst)
+        if(match.tp_dst==False):
+            return False 
+        match.dl_vlan_pcp=self.match_intersect(match1.dl_vlan_pcp, match2.dl_vlan_pcp)
+        if(match.dl_vlan_pcp==False):
+            return False 
+        match.nw_tos=self.match_intersect(match1.nw_tos, match2.nw_tos)
+        if(match.nw_tos==False):
+            return False
+        match.nw_src=self.match_intersect(match1.nw_src, match2.nw_src)
+        if(match.nw_src==False):
+            return False 
+        match.nw_dst=self.match_intersect(match1.nw_dst, match2.nw_dst)
+        if(match.nw_dst==False):
+            return False 
+#            other_nw_dst = other.get_nw_dst()
+#        if self_nw_dst[1] > other_nw_dst[1] or not IPAddr(other_nw_dst[0]).inNetwork((self_nw_dst[0], 32-self_nw_dst[1])): return False
+ 
+        return match
+        
+    def Check_loop(self,graph,start,end,flow_state):
+        q = Queue(0);
         temp_path = [start]
-
-        q.put(temp_path)
-
+        match=of.ofp_match()
+        flag=1
+        current_match_path=match_path(match,temp_path)
+        q.put(current_match_path)
         while q.qsize() != 0:
-                tmp_path = q.get()
-                last_node = tmp_path[len(tmp_path)-1]
-                print tmp_path
-                if last_node == end:
-                        print "VALID_PATH : ",tmp_path
-                for link_node in graph[last_node]:
-                        if link_node not in tmp_path:
-                                new_path = []
-                                new_path = tmp_path + [link_node]
-                                print "new path is "
-                                print new_path
-                                q.put(new_path)
-                        if link_node in tmp_path and link_node== end:
-                                print "loop to A"
-                                print tmp_path
-                                return 0
-        return 1
+            tmp_path = q.get()
+            lastmatch=tmp_path.lastswitchmatch
+            lastpath=tmp_path.path
+            last_node = lastpath[len(lastpath)-1]
+            if last_node is end and flag == 1:
+                flag=0
+            elif last_node is end and flag != 1:
+                return 1 
+
+	        for link_node in graph[last_node]:
+                    if link_node not in lastpath:
+                        new_path = []
+                        new_path = lastpath + [link_node]
+		        if link_node in self.flow_table:	
+                            for flow in self.flow_table[link_node]:
+                    	        match=flow.match
+                    	        cons_match=self.construct_match(lastmatch,match)
+                    	        if(cons_match!=False):
+                                    new_matchpath=match_path(cons_match,new_path)
+			            q.put(new_matchpath)
+		    else:
+		        return 0
+	return 1
+    
+    def send_flows(self):
+       	self.flow_table=core.updator.call_updator()
+        print self.flow_table
+	
+def launch():
+    core.registerNew(Optimization)
